@@ -1,8 +1,11 @@
 use std::fs::Metadata;
+use std::time::SystemTime;
 
-use crate::format::{fmt_time, print_label_value_pairs};
+use chrono::{DateTime, Local};
 
-pub fn print_dates(metadata: &Metadata, terminal_width: usize) {
+use crate::format::print_label_value_pairs;
+
+pub fn print(metadata: &Metadata, terminal_width: usize) {
     let mut pairs: Vec<(&str, String)> = Vec::new();
     if let Ok(t) = metadata.created() {
         pairs.push(("Created:", fmt_time(t)));
@@ -14,4 +17,9 @@ pub fn print_dates(metadata: &Metadata, terminal_width: usize) {
         pairs.push(("Accessed:", fmt_time(t)));
     }
     print_label_value_pairs(&pairs, terminal_width);
+}
+
+fn fmt_time(t: SystemTime) -> String {
+    let dt: DateTime<Local> = t.into();
+    dt.format("%Y-%m-%d %H:%M:%S %z").to_string()
 }

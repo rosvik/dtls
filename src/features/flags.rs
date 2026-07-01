@@ -1,4 +1,19 @@
-pub fn format_bsd_flags(flags: u32) -> String {
+use std::fs::Metadata;
+use std::os::macos::fs::MetadataExt;
+
+use colored::Colorize;
+
+use crate::format::label;
+
+pub fn print(meta: &Metadata) {
+    let flags = meta.st_flags();
+    if flags == 0 {
+        return;
+    }
+    println!("{}{}", label("Flags:"), format_bsd_flags(flags).yellow());
+}
+
+fn format_bsd_flags(flags: u32) -> String {
     let mapping: &[(u32, &str)] = &[
         (libc::UF_NODUMP, "nodump"),
         (libc::UF_IMMUTABLE, "uchg"),

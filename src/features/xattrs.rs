@@ -1,7 +1,30 @@
+use std::path::Path;
+
+use anyhow::Result;
 use chrono::{DateTime, Local};
 use colored::Colorize;
 
-pub fn decode_xattr(name: &str, value: &[u8]) -> String {
+pub fn print(path: &Path) -> Result<()> {
+    let xattrs: Vec<_> = xattr::list(path)?.collect();
+    if xattrs.is_empty() {
+        return Ok(());
+    }
+    println!("{}", "Extended attributes:".bold().cyan());
+    for attr in xattrs {
+        let attr_name = attr.to_string_lossy();
+        match xattr::get(path, &attr)? {
+            Some(value) => println!(
+                "  {} = {}",
+                attr_name.magenta(),
+                decode_xattr(&attr_name, &value)
+            ),
+            None => println!("  {} = {}", attr_name.magenta(), "(empty)".dimmed()),
+        }
+    }
+    Ok(())
+}
+
+fn decode_xattr(name: &str, value: &[u8]) -> String {
     match name {
         "com.apple.metadata:_kMDItemUserTags" => {
             decode_finder_tags(value).unwrap_or_else(|| display_xattr_value(value))

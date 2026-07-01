@@ -2,7 +2,34 @@ use std::fs;
 use std::io::Read;
 use std::path::Path;
 
-pub enum TextKind {
+use colored::Colorize;
+
+use crate::format::label;
+
+pub fn print(path: &Path, meta: &fs::Metadata) {
+    if meta.is_file() {
+        if let Ok(Some(t)) = infer::get_from_path(path) {
+            println!(
+                "{}{} ({})",
+                label("Type:"),
+                t.mime_type(),
+                t.extension().dimmed()
+            );
+        } else if let Ok(kind) = detect_text_kind(path) {
+            match kind {
+                TextKind::Binary => println!("{}{}", label("Type:"), "binary".red()),
+                TextKind::Text(enc) => {
+                    println!("{}{}", label("Type:"), "text".green());
+                    println!("{}{}", label("Encoding:"), enc);
+                }
+            }
+        }
+    } else if meta.is_dir() {
+        println!("{}{}", label("Type:"), "directory".blue());
+    }
+}
+
+enum TextKind {
     Binary,
     Text(String),
 }
@@ -25,7 +52,7 @@ fn detect_bom(bytes: &[u8]) -> Option<&'static str> {
     }
 }
 
-pub fn detect_text_kind(path: &Path) -> std::io::Result<TextKind> {
+fn detect_text_kind(path: &Path) -> std::io::Result<TextKind> {
     let mut file = fs::File::open(path)?;
     let mut sample = vec![0u8; 8192];
     let n = file.read(&mut sample)?;
