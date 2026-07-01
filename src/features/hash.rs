@@ -6,10 +6,14 @@ use anyhow::Result;
 use colored::Colorize;
 use sha2::{Digest, Sha256};
 
+use crate::context::Context;
 use crate::format::label;
 
-pub fn print(path: &Path) -> Result<()> {
-    println!("{}{}", label("SHA256:"), sha256_file(path)?.dimmed());
+pub fn print(ctx: &Context) -> Result<()> {
+    if !ctx.target_meta.as_ref().is_some_and(|m| m.is_file()) {
+        return Ok(());
+    }
+    println!("{}{}", label("SHA256:"), sha256_file(&ctx.path)?.dimmed());
     Ok(())
 }
 

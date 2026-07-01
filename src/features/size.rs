@@ -1,11 +1,10 @@
-use std::fs::Metadata;
-
 use colored::Colorize;
 
+use crate::context::Context;
 use crate::format::label;
 
-pub fn print(meta: Option<&Metadata>) {
-    match meta {
+pub fn print(ctx: &Context) {
+    match &ctx.target_meta {
         Some(m) => println!(
             "{}{} {}",
             label("Size:"),

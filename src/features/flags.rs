@@ -1,11 +1,14 @@
-use std::fs::Metadata;
 use std::os::macos::fs::MetadataExt;
 
 use colored::Colorize;
 
+use crate::context::Context;
 use crate::format::label;
 
-pub fn print(meta: &Metadata) {
+pub fn print(ctx: &Context) {
+    let Some(meta) = &ctx.target_meta else {
+        return;
+    };
     let flags = meta.st_flags();
     if flags == 0 {
         return;

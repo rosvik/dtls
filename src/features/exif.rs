@@ -4,8 +4,10 @@ use std::path::Path;
 
 use colored::Colorize;
 
-pub fn print(path: &Path) {
-    let Some(fields) = read_exif(path) else {
+use crate::context::Context;
+
+pub fn print(ctx: &Context) {
+    let Some(fields) = read_exif(&ctx.path) else {
         return;
     };
     println!("{}", "EXIF:".bold().cyan());

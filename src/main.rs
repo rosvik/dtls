@@ -1,17 +1,15 @@
+mod context;
 mod features;
 mod format;
 mod terminal;
-
-use std::fs;
-use std::path::Path;
 
 use anyhow::Result;
 use clap::Parser;
 use clio::ClioPath;
 use colored::Colorize;
 
+use crate::context::Context;
 use crate::features::{dates, exif, hash, kind, permissions, size, symlink, xattrs};
-use crate::terminal::terminal_size;
 
 #[derive(Parser, Debug)]
 #[command(
@@ -31,18 +29,30 @@ struct Args {
 
 fn main() -> Result<()> {
     let args = Args::parse();
-    let path: &Path = args.file.path();
+    let ctx = Context::new(args.file.path())?;
 
-    let symlink_meta = fs::symlink_metadata(path)?;
-    let is_symlink = symlink_meta.file_type().is_symlink();
-    let target_meta = fs::metadata(path).ok();
-    let terminal_size = terminal_size();
+    print_header(&ctx);
+    kind::print(&ctx);
+    size::print(&ctx);
+    permissions::print(&ctx);
+    #[cfg(target_os = "macos")]
+    features::flags::print(&ctx);
+    dates::print(&ctx);
+    symlink::print(&ctx)?;
+    hash::print(&ctx)?;
+    xattrs::print(&ctx)?;
+    exif::print(&ctx);
 
-    let name = path
+    Ok(())
+}
+
+fn print_header(ctx: &Context) {
+    let name = ctx
+        .path
         .file_name()
         .map(|s| s.to_string_lossy().into_owned())
-        .unwrap_or_else(|| path.display().to_string());
-    let abs_path = std::path::absolute(path).unwrap_or_else(|_| path.to_path_buf());
+        .unwrap_or_else(|| ctx.path.display().to_string());
+    let abs_path = std::path::absolute(&ctx.path).unwrap_or_else(|_| ctx.path.clone());
     println!(
         "{} {}{}{}",
         name.bold().green(),
@@ -51,27 +61,6 @@ fn main() -> Result<()> {
         ")".dimmed()
     );
     let separator_len = name.len() + abs_path.display().to_string().len() + 3;
-    let separator_len = terminal_size.width.min(separator_len);
+    let separator_len = ctx.terminal.width.min(separator_len);
     println!("{}", "─".repeat(separator_len));
-
-    if let Some(m) = &target_meta {
-        kind::print(path, m);
-    }
-    size::print(target_meta.as_ref());
-    if let Some(m) = &target_meta {
-        permissions::print(m);
-        #[cfg(target_os = "macos")]
-        features::flags::print(m);
-        dates::print(m, terminal_size.width);
-    }
-    if is_symlink {
-        symlink::print(path, target_meta.is_some())?;
-    }
-    if target_meta.as_ref().is_some_and(|m| m.is_file()) {
-        hash::print(path)?;
-    }
-    xattrs::print(path)?;
-    exif::print(path);
-
-    Ok(())
 }

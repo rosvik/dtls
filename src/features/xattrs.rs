@@ -1,18 +1,18 @@
-use std::path::Path;
-
 use anyhow::Result;
 use chrono::{DateTime, Local};
 use colored::Colorize;
 
-pub fn print(path: &Path) -> Result<()> {
-    let xattrs: Vec<_> = xattr::list(path)?.collect();
+use crate::context::Context;
+
+pub fn print(ctx: &Context) -> Result<()> {
+    let xattrs: Vec<_> = xattr::list(&ctx.path)?.collect();
     if xattrs.is_empty() {
         return Ok(());
     }
     println!("{}", "Extended attributes:".bold().cyan());
     for attr in xattrs {
         let attr_name = attr.to_string_lossy();
-        match xattr::get(path, &attr)? {
+        match xattr::get(&ctx.path, &attr)? {
             Some(value) => println!(
                 "  {} = {}",
                 attr_name.magenta(),

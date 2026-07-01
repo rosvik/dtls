@@ -4,18 +4,22 @@ use std::path::Path;
 
 use colored::Colorize;
 
+use crate::context::Context;
 use crate::format::label;
 
-pub fn print(path: &Path, meta: &fs::Metadata) {
+pub fn print(ctx: &Context) {
+    let Some(meta) = &ctx.target_meta else {
+        return;
+    };
     if meta.is_file() {
-        if let Ok(Some(t)) = infer::get_from_path(path) {
+        if let Ok(Some(t)) = infer::get_from_path(&ctx.path) {
             println!(
                 "{}{} ({})",
                 label("Type:"),
                 t.mime_type(),
                 t.extension().dimmed()
             );
-        } else if let Ok(kind) = detect_text_kind(path) {
+        } else if let Ok(kind) = detect_text_kind(&ctx.path) {
             match kind {
                 TextKind::Binary => println!("{}{}", label("Type:"), "binary".red()),
                 TextKind::Text(enc) => {

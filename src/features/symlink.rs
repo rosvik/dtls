@@ -1,19 +1,22 @@
 use std::fs;
-use std::path::Path;
 
 use anyhow::Result;
 use colored::Colorize;
 
+use crate::context::Context;
 use crate::format::label;
 
-pub fn print(path: &Path, target_reachable: bool) -> Result<()> {
-    let target = fs::read_link(path)?;
+pub fn print(ctx: &Context) -> Result<()> {
+    if !ctx.is_symlink {
+        return Ok(());
+    }
+    let target = fs::read_link(&ctx.path)?;
     println!(
         "{}-> {}",
         label("Symlink:"),
         target.display().to_string().cyan()
     );
-    if !target_reachable {
+    if ctx.target_meta.is_none() {
         println!("             {}", "(target does not exist)".red());
     }
     Ok(())
