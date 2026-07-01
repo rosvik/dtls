@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.0](https://github.com/rosvik/dtls/compare/v0.4.0...v0.5.0) (2026-07-01)
+
+
+### Features
+
+* make error handling more graceful ([7df122a](https://github.com/rosvik/dtls/commit/7df122a6e850ac829bf9d7929b4ee8e5528cf308))
+
 ## [0.4.0](https://github.com/rosvik/dtls/compare/v0.3.1...v0.4.0) (2026-05-27)
 
 
