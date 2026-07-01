@@ -3,7 +3,7 @@ use std::os::macos::fs::MetadataExt;
 use colored::Colorize;
 
 use crate::context::Context;
-use crate::format::label;
+use crate::output::format::label;
 
 pub fn print(ctx: &Context) {
     let Some(meta) = &ctx.target_meta else {

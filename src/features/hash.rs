@@ -7,7 +7,7 @@ use colored::Colorize;
 use sha2::{Digest, Sha256};
 
 use crate::context::Context;
-use crate::format::label;
+use crate::output::format::label;
 
 pub fn print(ctx: &Context) -> Result<()> {
     if !ctx.target_meta.as_ref().is_some_and(|m| m.is_file()) {

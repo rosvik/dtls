@@ -1,7 +1,7 @@
 use colored::Colorize;
 
 use crate::context::Context;
-use crate::format::label;
+use crate::output::format::label;
 
 pub fn print(ctx: &Context) {
     match &ctx.target_meta {

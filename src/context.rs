@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 
-use crate::terminal::{Size, terminal_size};
+use crate::output::terminal::{Size, terminal_size};
 
 /// Everything gathered once per invocation, read by the feature modules.
 pub struct Context {

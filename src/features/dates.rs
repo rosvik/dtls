@@ -3,7 +3,7 @@ use std::time::SystemTime;
 use chrono::{DateTime, Local};
 
 use crate::context::Context;
-use crate::format::print_label_value_pairs;
+use crate::output::format::print_label_value_pairs;
 
 pub fn print(ctx: &Context) {
     let Some(metadata) = &ctx.target_meta else {

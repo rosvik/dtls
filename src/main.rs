@@ -1,7 +1,6 @@
 mod context;
 mod features;
-mod format;
-mod terminal;
+mod output;
 
 use anyhow::Result;
 use clap::Parser;

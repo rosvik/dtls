@@ -4,7 +4,7 @@ use anyhow::Result;
 use colored::Colorize;
 
 use crate::context::Context;
-use crate::format::label;
+use crate::output::format::label;
 
 pub fn print(ctx: &Context) -> Result<()> {
     if !ctx.is_symlink {
