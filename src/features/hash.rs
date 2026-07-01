@@ -1,20 +1,20 @@
 use std::fs;
-use std::io::Read;
+use std::io::{Read, Result};
 use std::path::Path;
 
-use anyhow::Result;
 use colored::Colorize;
 use sha2::{Digest, Sha256};
 
 use crate::context::Context;
 use crate::output::format::label;
 
-pub fn print(ctx: &Context) -> Result<()> {
+pub fn print(ctx: &Context) {
     if !ctx.target_meta.as_ref().is_some_and(|m| m.is_file()) {
-        return Ok(());
+        return;
     }
-    println!("{}{}", label("SHA256:"), sha256_file(&ctx.path)?.dimmed());
-    Ok(())
+    if let Ok(hash) = sha256_file(&ctx.path) {
+        println!("{}{}", label("SHA256:"), hash.dimmed());
+    }
 }
 
 fn sha256_file(path: &Path) -> Result<String> {

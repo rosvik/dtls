@@ -1,27 +1,29 @@
-use anyhow::Result;
 use chrono::{DateTime, Local};
 use colored::Colorize;
 
 use crate::context::Context;
 
-pub fn print(ctx: &Context) -> Result<()> {
-    let xattrs: Vec<_> = xattr::list(&ctx.path)?.collect();
+pub fn print(ctx: &Context) {
+    let Ok(list) = xattr::list(&ctx.path) else {
+        return;
+    };
+    let xattrs: Vec<_> = list.collect();
     if xattrs.is_empty() {
-        return Ok(());
+        return;
     }
     println!("{}", "Extended attributes:".bold().cyan());
     for attr in xattrs {
         let attr_name = attr.to_string_lossy();
-        match xattr::get(&ctx.path, &attr)? {
-            Some(value) => println!(
+        match xattr::get(&ctx.path, &attr) {
+            Ok(Some(value)) => println!(
                 "  {} = {}",
                 attr_name.magenta(),
                 decode_xattr(&attr_name, &value)
             ),
-            None => println!("  {} = {}", attr_name.magenta(), "(empty)".dimmed()),
+            Ok(None) => println!("  {} = {}", attr_name.magenta(), "(empty)".dimmed()),
+            Err(_) => {}
         }
     }
-    Ok(())
 }
 
 fn decode_xattr(name: &str, value: &[u8]) -> String {

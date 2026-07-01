@@ -37,9 +37,9 @@ fn main() -> Result<()> {
     #[cfg(target_os = "macos")]
     features::flags::print(&ctx);
     dates::print(&ctx);
-    symlink::print(&ctx)?;
-    hash::print(&ctx)?;
-    xattrs::print(&ctx)?;
+    symlink::print(&ctx);
+    hash::print(&ctx);
+    xattrs::print(&ctx);
     exif::print(&ctx);
 
     Ok(())
