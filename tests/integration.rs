@@ -68,10 +68,12 @@ fn generate_darwin_fixtures() {
         Value::String("com.apple.backupd".into()),
     );
 
-    // Plain (non-plist) extended attribute.
+    // Plain (non-plist) extended attributes: a printable string and a raw
+    // binary value.
     let path = dir.join("with-xattr.txt");
     std::fs::write(&path, "a file with a plain xattr\n").unwrap();
     xattr::set(&path, "com.example.test", b"hello world").unwrap();
+    xattr::set(&path, "com.example.binary", &[0xde, 0xad, 0xbe, 0xef]).unwrap();
 
     // Quarantine (com.apple.quarantine): flags;timestamp;agent;uuid.
     let path = dir.join("quarantined.txt");
@@ -107,16 +109,20 @@ fn generate_darwin_fixtures() {
         ))]),
     );
 
-    // Made-up com.apple.metadata:* key — generic path, raw-key label.
+    // Made-up com.apple.metadata:* key with a nested value — generic path,
+    // raw-key label, nested structures render as plist debug output.
     let path = dir.join("generic-metadata.txt");
     std::fs::write(&path, "generic metadata\n").unwrap();
+    let mut nested = plist::Dictionary::new();
+    nested.insert("version".into(), Value::Integer(2i64.into()));
+    nested.insert(
+        "labels".into(),
+        Value::Array(vec![Value::String("a".into()), Value::String("b".into())]),
+    );
     set_plist_xattr(
         &path,
         "com.apple.metadata:kMDItemDtlsTestKey",
-        Value::Array(vec![
-            Value::String("alpha".into()),
-            Value::String("beta".into()),
-        ]),
+        Value::Dictionary(nested),
     );
 
     // Non-metadata attribute holding a binary plist.
@@ -401,14 +407,29 @@ fn downloaded_date_xattr_is_decoded_generically() {
 }
 
 /// A `com.apple.metadata:*` key dtls has never heard of still decodes
-/// generically: the bplist value is rendered by type (flat arrays joined
-/// with ", ") and labeled with the raw key when the vendored `mdimport -A`
-/// table has no display name for it.
+/// generically, labeled with the raw key when the vendored `mdimport -A`
+/// table has no display name for it. Values that aren't scalars or flat
+/// arrays of scalars (nested dicts/arrays) render as compact plist debug
+/// output rather than falling back to a hex dump.
 #[cfg(target_os = "macos")]
 #[test]
-fn unknown_metadata_xattr_is_decoded_generically() {
+fn nested_metadata_xattr_rendered_as_debug() {
     let out = run(&darwin_fixture("generic-metadata.txt"));
-    assert!(out.contains("kMDItemDtlsTestKey: alpha, beta"), "{out}");
+    assert!(out.contains("kMDItemDtlsTestKey:"), "{out}");
+    assert!(out.contains("version"), "{out}");
+    assert!(!out.contains("0x62706c697374"), "{out}");
+}
+
+/// An xattr value that is neither valid UTF-8 nor a binary plist falls
+/// back to a hex preview with the byte count.
+#[cfg(target_os = "macos")]
+#[test]
+fn binary_xattr_is_hex_previewed() {
+    let out = run(&darwin_fixture("with-xattr.txt"));
+    assert!(
+        out.contains("com.example.binary = 0xdeadbeef (4 bytes)"),
+        "{out}"
+    );
 }
 
 /// An xattr outside the com.apple.metadata: namespace whose value starts
