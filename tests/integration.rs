@@ -245,6 +245,12 @@ fn broken_symlink_marks_target_missing() {
     assert!(out.contains("(symlink target unreachable)"), "{out}");
 }
 
+/// Extended attributes are arbitrary name/value pairs attached to a file
+/// (see `man 2 setxattr`). Apple's convention is reverse-DNS names, with
+/// values under the `com.apple.metadata:` prefix encoded as binary property
+/// lists and mirrored into the Spotlight index. Any xattr dtls has no
+/// specific decoder for is listed generically under "Extended attributes:"
+/// with a printable-string or hex preview of its value.
 #[cfg(target_os = "macos")]
 #[test]
 fn plain_xattr_is_listed() {
@@ -254,6 +260,13 @@ fn plain_xattr_is_listed() {
     assert!(out.contains("hello world"), "{out}");
 }
 
+/// `com.apple.quarantine` is attached by browsers and other downloading
+/// apps so that Gatekeeper vets the file on first open. The value is a
+/// semicolon-separated string `flags;timestamp;agent;uuid`: quarantine
+/// flags in hex, the download time as hex Unix seconds, the app that set
+/// the flag, and a key into the QuarantineEventsV2 database. Apple doesn't
+/// document the format; the accepted reference is
+/// <https://eclecticlight.co/2017/12/11/xattr-com-apple-quarantine-the-quarantine-flag/>.
 #[cfg(target_os = "macos")]
 #[test]
 fn quarantine_xattr_is_decoded() {
@@ -267,6 +280,12 @@ fn quarantine_xattr_is_decoded() {
     );
 }
 
+/// `com.apple.metadata:_kMDItemUserTags` holds Finder tags as a binary
+/// plist array of strings, each `"Name\nColorIndex"` (or just `"Name"`),
+/// where the index maps 0–7 to none, gray, green, purple, blue, yellow,
+/// red, orange. The underscore prefix marks the attribute itself as
+/// private; the public API for it is the NSURL `tagNames` resource key:
+/// <https://developer.apple.com/documentation/foundation/urlresourcevalues/1792017-tagnames>.
 #[cfg(target_os = "macos")]
 #[test]
 fn finder_tags_xattr_is_decoded() {
@@ -276,6 +295,11 @@ fn finder_tags_xattr_is_decoded() {
     assert!(out.contains("Work"), "{out}");
 }
 
+/// `com.apple.metadata:kMDItemWhereFroms` records where a downloaded file
+/// came from, as a binary plist array of strings — by convention
+/// `[download URL, referrer URL]`. Finder and Spotlight show it as
+/// "Where from":
+/// <https://developer.apple.com/documentation/coreservices/kmditemwherefroms>.
 #[cfg(target_os = "macos")]
 #[test]
 fn where_from_xattr_is_decoded() {
@@ -285,6 +309,10 @@ fn where_from_xattr_is_decoded() {
     assert!(out.contains("https://example.com/page.html"), "{out}");
 }
 
+/// `com.apple.metadata:kMDItemFinderComment` carries the comment entered
+/// in Finder's Get Info panel, as a binary plist string. (Finder also
+/// mirrors comments into .DS_Store; the xattr is what Spotlight indexes.)
+/// <https://developer.apple.com/documentation/coreservices/kmditemfindercomment>.
 #[cfg(target_os = "macos")]
 #[test]
 fn finder_comment_xattr_is_decoded() {
@@ -293,6 +321,12 @@ fn finder_comment_xattr_is_decoded() {
     assert!(out.contains("Reviewed and approved"), "{out}");
 }
 
+/// `com.apple.metadata:com_apple_backup_excludeItem` marks the file as
+/// excluded from Time Machine backups. It's written by
+/// `tmutil addexclusion` (see `man 8 tmutil`) or the Core Services
+/// `CSBackupSetItemExcluded` API, and its value is a binary plist string
+/// naming the subsystem honouring the exclusion — in practice always
+/// "com.apple.backupd".
 #[cfg(target_os = "macos")]
 #[test]
 fn time_machine_exclusion_xattr_is_decoded() {
@@ -301,6 +335,10 @@ fn time_machine_exclusion_xattr_is_decoded() {
     assert!(out.contains("com.apple.backupd"), "{out}");
 }
 
+/// The `hidden` BSD file flag (`UF_HIDDEN` in `st_flags`, set with
+/// `chflags hidden` — see `man 2 chflags` and `man 1 chflags`) tells
+/// Finder not to show the file. It's a stat-level flag rather than an
+/// xattr, but like xattrs it's macOS metadata that git can't store.
 #[cfg(target_os = "macos")]
 #[test]
 fn hidden_flag_is_reported() {
