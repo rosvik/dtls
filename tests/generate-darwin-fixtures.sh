@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# Generates fixture files carrying macOS-only extended attributes into
-# tests/fixtures/generated/darwin/. Git cannot preserve xattrs across
-# commit/checkout, so these fixtures aren't checked in — run this script
-# locally to (re)create them before poking at dtls by hand.
+# Generates fixture files carrying macOS-only extended attributes and file
+# flags into tests/fixtures/generated/darwin/. Git cannot preserve xattrs
+# across commit/checkout, so these fixtures aren't checked in — the
+# integration tests run this script automatically, and you can run it by
+# hand to (re)create the files before poking at dtls manually.
 set -euo pipefail
 
 if [[ "$(uname -s)" != "Darwin" ]]; then
@@ -50,6 +51,32 @@ time_machine_file="$out_dir/time-machine-excluded.txt"
 echo "excluded from backup" >"$time_machine_file"
 set_plist_xattr "$time_machine_file" "com.apple.metadata:com_apple_backup_excludeItem" \
   '<string>com.apple.backupd</string>'
+
+# --- Plain (non-plist) extended attribute ---
+plain_xattr_file="$out_dir/with-xattr.txt"
+echo "a file with a plain xattr" >"$plain_xattr_file"
+xattr -w "com.example.test" "hello world" "$plain_xattr_file"
+
+# --- Quarantine (com.apple.quarantine): flags;timestamp;agent;uuid ---
+quarantined_file="$out_dir/quarantined.txt"
+echo "downloaded and quarantined" >"$quarantined_file"
+xattr -w "com.apple.quarantine" \
+  "0083;5e8c5b22;Safari;F8E9B7C8-1234-5678-9ABC-DEF012345678" "$quarantined_file"
+
+# --- Finder tags (_kMDItemUserTags): "name\ncolor-index" or plain name ---
+tagged_file="$out_dir/tagged.txt"
+echo "a file with Finder tags" >"$tagged_file"
+set_plist_xattr "$tagged_file" "com.apple.metadata:_kMDItemUserTags" \
+  '<array>
+  <string>Important
+6</string>
+  <string>Work</string>
+</array>'
+
+# --- Hidden file flag (chflags hidden) ---
+hidden_file="$out_dir/hidden.txt"
+echo "hidden from Finder" >"$hidden_file"
+chflags hidden "$hidden_file"
 
 echo "Generated fixtures in $out_dir:"
 for f in "$out_dir"/*; do

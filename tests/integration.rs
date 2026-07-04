@@ -8,6 +8,28 @@ fn fixture(name: &str) -> PathBuf {
         .join(name)
 }
 
+/// Returns a fixture from tests/fixtures/generated/darwin/, running
+/// generate-darwin-fixtures.sh once per test run to (re)create them.
+/// These carry xattrs and file flags that git can't store.
+#[cfg(target_os = "macos")]
+fn darwin_fixture(name: &str) -> PathBuf {
+    static GENERATE: std::sync::Once = std::sync::Once::new();
+    GENERATE.call_once(|| {
+        let script =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/generate-darwin-fixtures.sh");
+        let output = std::process::Command::new(&script)
+            .output()
+            .expect("failed to run generate-darwin-fixtures.sh");
+        assert!(
+            output.status.success(),
+            "generate-darwin-fixtures.sh failed:\n{}{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr),
+        );
+    });
+    fixture("generated/darwin").join(name)
+}
+
 fn run(path: &Path) -> String {
     let output = Command::cargo_bin("dtls")
         .unwrap()
@@ -150,12 +172,7 @@ fn broken_symlink_marks_target_missing() {
 #[cfg(target_os = "macos")]
 #[test]
 fn plain_xattr_is_listed() {
-    let tmp = tempfile::tempdir().unwrap();
-    let path = tmp.path().join("with-xattr.txt");
-    std::fs::write(&path, "hi").unwrap();
-    xattr::set(&path, "com.example.test", b"hello world").unwrap();
-
-    let out = run(&path);
+    let out = run(&darwin_fixture("with-xattr.txt"));
     assert!(out.contains("Extended attributes:"), "{out}");
     assert!(out.contains("com.example.test"), "{out}");
     assert!(out.contains("hello world"), "{out}");
@@ -164,17 +181,7 @@ fn plain_xattr_is_listed() {
 #[cfg(target_os = "macos")]
 #[test]
 fn quarantine_xattr_is_decoded() {
-    let tmp = tempfile::tempdir().unwrap();
-    let path = tmp.path().join("quarantined.txt");
-    std::fs::write(&path, "hi").unwrap();
-    xattr::set(
-        &path,
-        "com.apple.quarantine",
-        b"0083;5e8c5b22;Safari;F8E9B7C8-1234-5678-9ABC-DEF012345678",
-    )
-    .unwrap();
-
-    let out = run(&path);
+    let out = run(&darwin_fixture("quarantined.txt"));
     assert!(out.contains("quarantine:"), "{out}");
     assert!(out.contains("Safari"), "{out}");
     assert!(out.contains("flags=0083"), "{out}");
@@ -187,15 +194,7 @@ fn quarantine_xattr_is_decoded() {
 #[cfg(target_os = "macos")]
 #[test]
 fn finder_tags_xattr_is_decoded() {
-    let tmp = tempfile::tempdir().unwrap();
-    let path = tmp.path().join("tagged.txt");
-    std::fs::write(&path, "hi").unwrap();
-    let tags = vec!["Important\n6".to_string(), "Work".to_string()];
-    let mut plist_bytes = Vec::new();
-    plist::to_writer_binary(&mut plist_bytes, &tags).unwrap();
-    xattr::set(&path, "com.apple.metadata:_kMDItemUserTags", &plist_bytes).unwrap();
-
-    let out = run(&path);
+    let out = run(&darwin_fixture("tagged.txt"));
     assert!(out.contains("Finder tags:"), "{out}");
     assert!(out.contains("Important (red)"), "{out}");
     assert!(out.contains("Work"), "{out}");
@@ -204,18 +203,7 @@ fn finder_tags_xattr_is_decoded() {
 #[cfg(target_os = "macos")]
 #[test]
 fn where_from_xattr_is_decoded() {
-    let tmp = tempfile::tempdir().unwrap();
-    let path = tmp.path().join("downloaded.zip");
-    std::fs::write(&path, "hi").unwrap();
-    let urls = vec![
-        "https://example.com/downloaded.zip".to_string(),
-        "https://example.com/page.html".to_string(),
-    ];
-    let mut plist_bytes = Vec::new();
-    plist::to_writer_binary(&mut plist_bytes, &urls).unwrap();
-    xattr::set(&path, "com.apple.metadata:kMDItemWhereFroms", &plist_bytes).unwrap();
-
-    let out = run(&path);
+    let out = run(&darwin_fixture("downloaded-file.txt"));
     assert!(out.contains("Where from:"), "{out}");
     assert!(out.contains("https://example.com/downloaded.zip"), "{out}");
     assert!(out.contains("https://example.com/page.html"), "{out}");
@@ -224,15 +212,7 @@ fn where_from_xattr_is_decoded() {
 #[cfg(target_os = "macos")]
 #[test]
 fn finder_comment_xattr_is_decoded() {
-    let tmp = tempfile::tempdir().unwrap();
-    let path = tmp.path().join("commented.txt");
-    std::fs::write(&path, "hi").unwrap();
-    let comment = "Reviewed and approved".to_string();
-    let mut plist_bytes = Vec::new();
-    plist::to_writer_binary(&mut plist_bytes, &comment).unwrap();
-    xattr::set(&path, "com.apple.metadata:kMDItemFinderComment", &plist_bytes).unwrap();
-
-    let out = run(&path);
+    let out = run(&darwin_fixture("commented-file.txt"));
     assert!(out.contains("Finder comment:"), "{out}");
     assert!(out.contains("Reviewed and approved"), "{out}");
 }
@@ -240,20 +220,7 @@ fn finder_comment_xattr_is_decoded() {
 #[cfg(target_os = "macos")]
 #[test]
 fn time_machine_exclusion_xattr_is_decoded() {
-    let tmp = tempfile::tempdir().unwrap();
-    let path = tmp.path().join("excluded.txt");
-    std::fs::write(&path, "hi").unwrap();
-    let agent = "com.apple.backupd".to_string();
-    let mut plist_bytes = Vec::new();
-    plist::to_writer_binary(&mut plist_bytes, &agent).unwrap();
-    xattr::set(
-        &path,
-        "com.apple.metadata:com_apple_backup_excludeItem",
-        &plist_bytes,
-    )
-    .unwrap();
-
-    let out = run(&path);
+    let out = run(&darwin_fixture("time-machine-excluded.txt"));
     assert!(out.contains("Time Machine:"), "{out}");
     assert!(out.contains("com.apple.backupd"), "{out}");
 }
@@ -261,16 +228,6 @@ fn time_machine_exclusion_xattr_is_decoded() {
 #[cfg(target_os = "macos")]
 #[test]
 fn hidden_flag_is_reported() {
-    let tmp = tempfile::tempdir().unwrap();
-    let path = tmp.path().join("hidden.txt");
-    std::fs::write(&path, "hi").unwrap();
-    let status = std::process::Command::new("chflags")
-        .arg("hidden")
-        .arg(&path)
-        .status()
-        .expect("chflags");
-    assert!(status.success(), "chflags failed");
-
-    let out = run(&path);
+    let out = run(&darwin_fixture("hidden.txt"));
     assert!(out.contains("Flags:       hidden"), "{out}");
 }
