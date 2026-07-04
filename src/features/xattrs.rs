@@ -3,6 +3,8 @@ use colored::Colorize;
 
 use crate::context::Context;
 
+mod mditem_names;
+
 pub fn print(ctx: &Context) {
     let Ok(list) = xattr::list(&ctx.path) else {
         return;
@@ -34,46 +36,72 @@ fn decode_xattr(name: &str, value: &[u8]) -> String {
         "com.apple.quarantine" => {
             decode_quarantine(value).unwrap_or_else(|| display_xattr_value(value))
         }
-        "com.apple.metadata:kMDItemWhereFroms" => {
-            decode_where_froms(value).unwrap_or_else(|| display_xattr_value(value))
-        }
-        "com.apple.metadata:kMDItemFinderComment" => {
-            decode_finder_comment(value).unwrap_or_else(|| display_xattr_value(value))
-        }
-        "com.apple.metadata:com_apple_backup_excludeItem" => {
-            decode_time_machine_exclusion(value).unwrap_or_else(|| display_xattr_value(value))
+        n if n.starts_with("com.apple.metadata:") => {
+            decode_metadata(n, value).unwrap_or_else(|| display_xattr_value(value))
         }
         _ => display_xattr_value(value),
     }
 }
 
-fn decode_where_froms(value: &[u8]) -> Option<String> {
+/// Any `com.apple.metadata:<key>` attribute holds the value of the Spotlight
+/// attribute `<key>` as a binary plist. Decodes it generically, labeled with
+/// the key's display name from the vendored `mdimport -A` table (falling
+/// back to the raw key).
+fn decode_metadata(name: &str, value: &[u8]) -> Option<String> {
+    let key = name.strip_prefix("com.apple.metadata:")?;
     let parsed: plist::Value = plist::from_bytes(value).ok()?;
-    let arr = parsed.as_array()?;
-    let urls: Vec<&str> = arr.iter().filter_map(|v| v.as_string()).collect();
-    if urls.is_empty() {
-        return None;
-    }
-    Some(format!("{} {}", "Where from:".bold(), urls.join(", ")))
+    let rendered = render_plist_value(&parsed)?;
+    let label = display_name(key).unwrap_or(key);
+    Some(format!("{} {}", format!("{label}:").bold(), rendered))
 }
 
-fn decode_finder_comment(value: &[u8]) -> Option<String> {
-    let parsed: plist::Value = plist::from_bytes(value).ok()?;
-    let comment = parsed.as_string()?;
-    if comment.is_empty() {
-        return None;
-    }
-    Some(format!("{} {}", "Finder comment:".bold(), comment))
+fn display_name(key: &str) -> Option<&'static str> {
+    let lookup = |k| {
+        mditem_names::DISPLAY_NAMES
+            .binary_search_by_key(&k, |&(k, _)| k)
+            .ok()
+            .map(|i| mditem_names::DISPLAY_NAMES[i].1)
+    };
+    // A leading underscore marks a key as private API; the schema often
+    // lists the public counterpart (e.g. _kMDItemUserTags → kMDItemUserTags).
+    lookup(key).or_else(|| lookup(key.strip_prefix('_')?))
 }
 
-fn decode_time_machine_exclusion(value: &[u8]) -> Option<String> {
-    let parsed: plist::Value = plist::from_bytes(value).ok()?;
-    let agent = parsed.as_string()?;
-    Some(format!(
-        "{} excluded by {}",
-        "Time Machine:".bold().yellow(),
-        agent
-    ))
+fn render_plist_value(v: &plist::Value) -> Option<String> {
+    if let Some(s) = render_plist_scalar(v) {
+        return Some(s);
+    }
+    match v {
+        plist::Value::Array(arr) => {
+            if arr.is_empty() {
+                return None;
+            }
+            match arr
+                .iter()
+                .map(render_plist_scalar)
+                .collect::<Option<Vec<_>>>()
+            {
+                Some(items) => Some(items.join(", ")),
+                None => Some(format!("{v:?}")),
+            }
+        }
+        plist::Value::Dictionary(_) => Some(format!("{v:?}")),
+        _ => None,
+    }
+}
+
+fn render_plist_scalar(v: &plist::Value) -> Option<String> {
+    match v {
+        plist::Value::String(s) => Some(s.clone()),
+        plist::Value::Boolean(b) => Some(b.to_string()),
+        plist::Value::Integer(i) => Some(i.to_string()),
+        plist::Value::Real(r) => Some(r.to_string()),
+        plist::Value::Date(d) => {
+            let dt: DateTime<Local> = std::time::SystemTime::from(*d).into();
+            Some(dt.format("%Y-%m-%d %H:%M:%S %z").to_string())
+        }
+        _ => None,
+    }
 }
 
 fn decode_finder_tags(value: &[u8]) -> Option<String> {
@@ -131,6 +159,12 @@ fn decode_quarantine(value: &[u8]) -> Option<String> {
 }
 
 fn display_xattr_value(v: &[u8]) -> String {
+    if v.starts_with(b"bplist00") {
+        let decoded: Option<plist::Value> = plist::from_bytes(v).ok();
+        if let Some(rendered) = decoded.as_ref().and_then(render_plist_value) {
+            return format!("{} ({} bytes)", rendered, v.len());
+        }
+    }
     let printable = std::str::from_utf8(v).ok().filter(|s| {
         s.chars()
             .all(|c| !c.is_control() || c == '\n' || c == '\t' || c == '\r')
