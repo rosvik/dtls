@@ -34,8 +34,46 @@ fn decode_xattr(name: &str, value: &[u8]) -> String {
         "com.apple.quarantine" => {
             decode_quarantine(value).unwrap_or_else(|| display_xattr_value(value))
         }
+        "com.apple.metadata:kMDItemWhereFroms" => {
+            decode_where_froms(value).unwrap_or_else(|| display_xattr_value(value))
+        }
+        "com.apple.metadata:kMDItemFinderComment" => {
+            decode_finder_comment(value).unwrap_or_else(|| display_xattr_value(value))
+        }
+        "com.apple.metadata:com_apple_backup_excludeItem" => {
+            decode_time_machine_exclusion(value).unwrap_or_else(|| display_xattr_value(value))
+        }
         _ => display_xattr_value(value),
     }
+}
+
+fn decode_where_froms(value: &[u8]) -> Option<String> {
+    let parsed: plist::Value = plist::from_bytes(value).ok()?;
+    let arr = parsed.as_array()?;
+    let urls: Vec<&str> = arr.iter().filter_map(|v| v.as_string()).collect();
+    if urls.is_empty() {
+        return None;
+    }
+    Some(format!("{} {}", "Where from:".bold(), urls.join(", ")))
+}
+
+fn decode_finder_comment(value: &[u8]) -> Option<String> {
+    let parsed: plist::Value = plist::from_bytes(value).ok()?;
+    let comment = parsed.as_string()?;
+    if comment.is_empty() {
+        return None;
+    }
+    Some(format!("{} {}", "Finder comment:".bold(), comment))
+}
+
+fn decode_time_machine_exclusion(value: &[u8]) -> Option<String> {
+    let parsed: plist::Value = plist::from_bytes(value).ok()?;
+    let agent = parsed.as_string()?;
+    Some(format!(
+        "{} excluded by {}",
+        "Time Machine:".bold().yellow(),
+        agent
+    ))
 }
 
 fn decode_finder_tags(value: &[u8]) -> Option<String> {
