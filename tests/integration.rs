@@ -203,6 +203,63 @@ fn finder_tags_xattr_is_decoded() {
 
 #[cfg(target_os = "macos")]
 #[test]
+fn where_from_xattr_is_decoded() {
+    let tmp = tempfile::tempdir().unwrap();
+    let path = tmp.path().join("downloaded.zip");
+    std::fs::write(&path, "hi").unwrap();
+    let urls = vec![
+        "https://example.com/downloaded.zip".to_string(),
+        "https://example.com/page.html".to_string(),
+    ];
+    let mut plist_bytes = Vec::new();
+    plist::to_writer_binary(&mut plist_bytes, &urls).unwrap();
+    xattr::set(&path, "com.apple.metadata:kMDItemWhereFroms", &plist_bytes).unwrap();
+
+    let out = run(&path);
+    assert!(out.contains("Where from:"), "{out}");
+    assert!(out.contains("https://example.com/downloaded.zip"), "{out}");
+    assert!(out.contains("https://example.com/page.html"), "{out}");
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn finder_comment_xattr_is_decoded() {
+    let tmp = tempfile::tempdir().unwrap();
+    let path = tmp.path().join("commented.txt");
+    std::fs::write(&path, "hi").unwrap();
+    let comment = "Reviewed and approved".to_string();
+    let mut plist_bytes = Vec::new();
+    plist::to_writer_binary(&mut plist_bytes, &comment).unwrap();
+    xattr::set(&path, "com.apple.metadata:kMDItemFinderComment", &plist_bytes).unwrap();
+
+    let out = run(&path);
+    assert!(out.contains("Finder comment:"), "{out}");
+    assert!(out.contains("Reviewed and approved"), "{out}");
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn time_machine_exclusion_xattr_is_decoded() {
+    let tmp = tempfile::tempdir().unwrap();
+    let path = tmp.path().join("excluded.txt");
+    std::fs::write(&path, "hi").unwrap();
+    let agent = "com.apple.backupd".to_string();
+    let mut plist_bytes = Vec::new();
+    plist::to_writer_binary(&mut plist_bytes, &agent).unwrap();
+    xattr::set(
+        &path,
+        "com.apple.metadata:com_apple_backup_excludeItem",
+        &plist_bytes,
+    )
+    .unwrap();
+
+    let out = run(&path);
+    assert!(out.contains("Time Machine:"), "{out}");
+    assert!(out.contains("com.apple.backupd"), "{out}");
+}
+
+#[cfg(target_os = "macos")]
+#[test]
 fn hidden_flag_is_reported() {
     let tmp = tempfile::tempdir().unwrap();
     let path = tmp.path().join("hidden.txt");
