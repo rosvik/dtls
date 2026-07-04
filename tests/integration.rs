@@ -8,26 +8,102 @@ fn fixture(name: &str) -> PathBuf {
         .join(name)
 }
 
-/// Returns a fixture from tests/fixtures/generated/darwin/, running
-/// generate-darwin-fixtures.sh once per test run to (re)create them.
-/// These carry xattrs and file flags that git can't store.
+/// Returns a fixture from tests/fixtures/generated/darwin/, (re)generating
+/// them once per test run. These files carry macOS xattrs and file flags
+/// that git can't store, so they aren't checked in — they're left in place
+/// after the run for poking at dtls manually.
 #[cfg(target_os = "macos")]
 fn darwin_fixture(name: &str) -> PathBuf {
     static GENERATE: std::sync::Once = std::sync::Once::new();
-    GENERATE.call_once(|| {
-        let script =
-            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/generate-darwin-fixtures.sh");
-        let output = std::process::Command::new(&script)
-            .output()
-            .expect("failed to run generate-darwin-fixtures.sh");
-        assert!(
-            output.status.success(),
-            "generate-darwin-fixtures.sh failed:\n{}{}",
-            String::from_utf8_lossy(&output.stdout),
-            String::from_utf8_lossy(&output.stderr),
-        );
-    });
+    GENERATE.call_once(generate_darwin_fixtures);
     fixture("generated/darwin").join(name)
+}
+
+/// Sets `attr` on `path` to the binary-plist encoding of `value`, the format
+/// macOS uses for its com.apple.metadata:* attributes.
+#[cfg(target_os = "macos")]
+fn set_plist_xattr(path: &Path, attr: &str, value: plist::Value) {
+    let mut bytes = Vec::new();
+    value.to_writer_binary(&mut bytes).unwrap();
+    xattr::set(path, attr, &bytes).unwrap();
+}
+
+#[cfg(target_os = "macos")]
+fn generate_darwin_fixtures() {
+    use plist::Value;
+
+    let dir = fixture("generated/darwin");
+    if dir.exists() {
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+    std::fs::create_dir_all(&dir).unwrap();
+
+    // Where from (kMDItemWhereFroms): download source URLs.
+    let path = dir.join("downloaded-file.txt");
+    std::fs::write(&path, "downloaded content\n").unwrap();
+    set_plist_xattr(
+        &path,
+        "com.apple.metadata:kMDItemWhereFroms",
+        Value::Array(vec![
+            Value::String("https://example.com/downloaded.zip".into()),
+            Value::String("https://example.com/page.html".into()),
+        ]),
+    );
+
+    // Finder comment (kMDItemFinderComment).
+    let path = dir.join("commented-file.txt");
+    std::fs::write(&path, "a file with a Finder comment\n").unwrap();
+    set_plist_xattr(
+        &path,
+        "com.apple.metadata:kMDItemFinderComment",
+        Value::String("Reviewed and approved".into()),
+    );
+
+    // Time Machine exclusion (com_apple_backup_excludeItem).
+    let path = dir.join("time-machine-excluded.txt");
+    std::fs::write(&path, "excluded from backup\n").unwrap();
+    set_plist_xattr(
+        &path,
+        "com.apple.metadata:com_apple_backup_excludeItem",
+        Value::String("com.apple.backupd".into()),
+    );
+
+    // Plain (non-plist) extended attribute.
+    let path = dir.join("with-xattr.txt");
+    std::fs::write(&path, "a file with a plain xattr\n").unwrap();
+    xattr::set(&path, "com.example.test", b"hello world").unwrap();
+
+    // Quarantine (com.apple.quarantine): flags;timestamp;agent;uuid.
+    let path = dir.join("quarantined.txt");
+    std::fs::write(&path, "downloaded and quarantined\n").unwrap();
+    xattr::set(
+        &path,
+        "com.apple.quarantine",
+        b"0083;5e8c5b22;Safari;F8E9B7C8-1234-5678-9ABC-DEF012345678",
+    )
+    .unwrap();
+
+    // Finder tags (_kMDItemUserTags): "name\ncolor-index" or plain name.
+    let path = dir.join("tagged.txt");
+    std::fs::write(&path, "a file with Finder tags\n").unwrap();
+    set_plist_xattr(
+        &path,
+        "com.apple.metadata:_kMDItemUserTags",
+        Value::Array(vec![
+            Value::String("Important\n6".into()),
+            Value::String("Work".into()),
+        ]),
+    );
+
+    // Hidden file flag (UF_HIDDEN, `chflags hidden`).
+    let path = dir.join("hidden.txt");
+    std::fs::write(&path, "hidden from Finder\n").unwrap();
+    let c_path = {
+        use std::os::unix::ffi::OsStrExt;
+        std::ffi::CString::new(path.as_os_str().as_bytes()).unwrap()
+    };
+    let rc = unsafe { libc::chflags(c_path.as_ptr(), libc::UF_HIDDEN) };
+    assert_eq!(rc, 0, "chflags(UF_HIDDEN) failed");
 }
 
 fn run(path: &Path) -> String {
