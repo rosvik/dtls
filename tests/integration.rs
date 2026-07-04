@@ -95,6 +95,42 @@ fn generate_darwin_fixtures() {
         ]),
     );
 
+    // Downloaded date (kMDItemDownloadedDate): bplist array of dates, no
+    // dedicated decoder — exercises the generic com.apple.metadata:* path.
+    let path = dir.join("downloaded-date.txt");
+    std::fs::write(&path, "downloaded content\n").unwrap();
+    set_plist_xattr(
+        &path,
+        "com.apple.metadata:kMDItemDownloadedDate",
+        Value::Array(vec![Value::Date(plist::Date::from(
+            std::time::UNIX_EPOCH + std::time::Duration::from_secs(1_600_000_000),
+        ))]),
+    );
+
+    // Made-up com.apple.metadata:* key — generic path, raw-key label.
+    let path = dir.join("generic-metadata.txt");
+    std::fs::write(&path, "generic metadata\n").unwrap();
+    set_plist_xattr(
+        &path,
+        "com.apple.metadata:kMDItemDtlsTestKey",
+        Value::Array(vec![
+            Value::String("alpha".into()),
+            Value::String("beta".into()),
+        ]),
+    );
+
+    // Non-metadata attribute holding a binary plist.
+    let path = dir.join("custom-bplist.txt");
+    std::fs::write(&path, "custom bplist xattr\n").unwrap();
+    set_plist_xattr(
+        &path,
+        "com.example.bplist",
+        Value::Array(vec![
+            Value::String("one".into()),
+            Value::String("two".into()),
+        ]),
+    );
+
     // Hidden file flag (UF_HIDDEN, `chflags hidden`).
     let path = dir.join("hidden.txt");
     std::fs::write(&path, "hidden from Finder\n").unwrap();
@@ -297,8 +333,9 @@ fn finder_tags_xattr_is_decoded() {
 
 /// `com.apple.metadata:kMDItemWhereFroms` records where a downloaded file
 /// came from, as a binary plist array of strings — by convention
-/// `[download URL, referrer URL]`. Finder and Spotlight show it as
-/// "Where from":
+/// `[download URL, referrer URL]`. Decoded via the generic
+/// com.apple.metadata:* path; the schema display name is "Where from",
+/// matching what Finder and Spotlight show:
 /// <https://developer.apple.com/documentation/coreservices/kmditemwherefroms>.
 #[cfg(target_os = "macos")]
 #[test]
@@ -312,13 +349,17 @@ fn where_from_xattr_is_decoded() {
 /// `com.apple.metadata:kMDItemFinderComment` carries the comment entered
 /// in Finder's Get Info panel, as a binary plist string. (Finder also
 /// mirrors comments into .DS_Store; the xattr is what Spotlight indexes.)
+/// Decoded via the generic com.apple.metadata:* path; the schema display
+/// name is "Spotlight comment":
 /// <https://developer.apple.com/documentation/coreservices/kmditemfindercomment>.
 #[cfg(target_os = "macos")]
 #[test]
 fn finder_comment_xattr_is_decoded() {
     let out = run(&darwin_fixture("commented-file.txt"));
-    assert!(out.contains("Finder comment:"), "{out}");
-    assert!(out.contains("Reviewed and approved"), "{out}");
+    assert!(
+        out.contains("Spotlight comment: Reviewed and approved"),
+        "{out}"
+    );
 }
 
 /// `com.apple.metadata:com_apple_backup_excludeItem` marks the file as
@@ -326,13 +367,59 @@ fn finder_comment_xattr_is_decoded() {
 /// `tmutil addexclusion` (see `man 8 tmutil`) or the Core Services
 /// `CSBackupSetItemExcluded` API, and its value is a binary plist string
 /// naming the subsystem honouring the exclusion — in practice always
-/// "com.apple.backupd".
+/// "com.apple.backupd". Decoded via the generic com.apple.metadata:* path;
+/// the key has no schema display name, so it's labeled with the raw key.
 #[cfg(target_os = "macos")]
 #[test]
 fn time_machine_exclusion_xattr_is_decoded() {
     let out = run(&darwin_fixture("time-machine-excluded.txt"));
-    assert!(out.contains("Time Machine:"), "{out}");
-    assert!(out.contains("com.apple.backupd"), "{out}");
+    assert!(
+        out.contains("com_apple_backup_excludeItem: com.apple.backupd"),
+        "{out}"
+    );
+}
+
+/// Any other `com.apple.metadata:<key>` attribute holds the value of the
+/// Spotlight attribute `<key>` as a binary plist, mirrored into the
+/// Spotlight index by mds. dtls decodes the whole family generically.
+/// `kMDItemDownloadedDate` (the download time, written by browsers
+/// alongside `kMDItemWhereFroms`) is absent from the `mdimport -A` schema
+/// on current macOS, so it's labeled with the raw key:
+/// <https://developer.apple.com/library/archive/documentation/CoreServices/Reference/MetadataAttributesRef/Reference/CommonAttrs.html>.
+#[cfg(target_os = "macos")]
+#[test]
+fn downloaded_date_xattr_is_decoded_generically() {
+    use chrono::{DateTime, Local};
+    let out = run(&darwin_fixture("downloaded-date.txt"));
+    let expected = DateTime::from_timestamp(1_600_000_000, 0)
+        .unwrap()
+        .with_timezone(&Local)
+        .format("%Y-%m-%d %H:%M:%S %z")
+        .to_string();
+    assert!(out.contains("kMDItemDownloadedDate:"), "{out}");
+    assert!(out.contains(&expected), "{out}");
+}
+
+/// A `com.apple.metadata:*` key dtls has never heard of still decodes
+/// generically: the bplist value is rendered by type (flat arrays joined
+/// with ", ") and labeled with the raw key when the vendored `mdimport -A`
+/// table has no display name for it.
+#[cfg(target_os = "macos")]
+#[test]
+fn unknown_metadata_xattr_is_decoded_generically() {
+    let out = run(&darwin_fixture("generic-metadata.txt"));
+    assert!(out.contains("kMDItemDtlsTestKey: alpha, beta"), "{out}");
+}
+
+/// An xattr outside the com.apple.metadata: namespace whose value starts
+/// with the binary-plist magic `bplist00` is decoded as a plist rather
+/// than hex-dumped.
+#[cfg(target_os = "macos")]
+#[test]
+fn bplist_xattr_without_decoder_is_decoded() {
+    let out = run(&darwin_fixture("custom-bplist.txt"));
+    assert!(out.contains("com.example.bplist = one, two"), "{out}");
+    assert!(!out.contains("0x62706c697374"), "{out}");
 }
 
 /// The `hidden` BSD file flag (`UF_HIDDEN` in `st_flags`, set with
