@@ -141,17 +141,17 @@ fn decode_finder_tags(value: &[u8]) -> Option<String> {
         .map(|s| {
             let (name, color) = s.split_once('\n').unwrap_or((s, ""));
             let color_name = match color {
-                "1" => Some("gray"),
-                "2" => Some("green"),
-                "3" => Some("purple"),
-                "4" => Some("blue"),
-                "5" => Some("yellow"),
-                "6" => Some("red"),
-                "7" => Some("orange"),
+                "1" => Some(format!("{}", "gray".dimmed())),
+                "2" => Some(format!("{}", "green".green())),
+                "3" => Some(format!("{}", "purple".purple())),
+                "4" => Some(format!("{}", "blue".blue())),
+                "5" => Some(format!("{}", "yellow".bright_yellow())),
+                "6" => Some(format!("{}", "red".red())),
+                "7" => Some(format!("{}", "orange".yellow())), // Don't @ me
                 _ => None,
             };
             match color_name {
-                Some(c) => format!("{} ({})", name, c),
+                Some(c) => format!("{} ({})", name, c.bold()),
                 None => name.to_string(),
             }
         })
@@ -159,9 +159,13 @@ fn decode_finder_tags(value: &[u8]) -> Option<String> {
     if tags.is_empty() {
         return None;
     }
-    Some(format!("{} [{}]", "Finder tags:".bold(), tags.join(", ")))
+    Some(tags.join(", "))
 }
 
+/// Decodes the `com.apple.quarantine` xattr. It is a string on the format:
+/// `flags;hex-unix-time;agent;event-uuid`
+///
+/// <https://eclecticlight.co/2017/12/11/xattr-com-apple-quarantine-the-quarantine-flag/>
 fn decode_quarantine(value: &[u8]) -> Option<String> {
     let s = std::str::from_utf8(value).ok()?;
     let parts: Vec<&str> = s.split(';').collect();
@@ -171,17 +175,16 @@ fn decode_quarantine(value: &[u8]) -> Option<String> {
     let flags = parts[0];
     let timestamp = u64::from_str_radix(parts[1], 16).ok()?;
     let agent = parts[2];
-    let event = parts.get(3).copied().unwrap_or("");
+    let event_uuid = parts.get(3).copied().unwrap_or("");
     let dt: DateTime<Local> = DateTime::from_timestamp(timestamp as i64, 0)?.with_timezone(&Local);
     let mut out = format!(
-        "{} flags={} at={} by={}",
-        "quarantine:".yellow().bold(),
+        "flags={} at={} by={}",
         flags,
         dt.format("%Y-%m-%d %H:%M:%S %z"),
-        agent.yellow()
+        agent
     );
-    if !event.is_empty() {
-        out.push_str(&format!(" event={}", event.dimmed()));
+    if !event_uuid.is_empty() {
+        out.push_str(&format!(" event={}", event_uuid.dimmed()));
     }
     Some(out)
 }

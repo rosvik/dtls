@@ -41,7 +41,6 @@ mod darwin {
     #[test]
     fn quarantine_xattr_is_decoded() {
         let out = run(&darwin_fixture("quarantined.txt"));
-        assert!(out.contains("quarantine:"), "{out}");
         assert!(out.contains("Safari"), "{out}");
         assert!(out.contains("flags=0083"), "{out}");
         assert!(
@@ -59,7 +58,6 @@ mod darwin {
     #[test]
     fn finder_tags_xattr_is_decoded() {
         let out = run(&darwin_fixture("tagged.txt"));
-        assert!(out.contains("Finder tags:"), "{out}");
         assert!(out.contains("Important (red)"), "{out}");
         assert!(out.contains("Work"), "{out}");
     }
