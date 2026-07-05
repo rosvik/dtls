@@ -67,28 +67,40 @@ mod darwin {
     /// `com.apple.metadata:kMDItemWhereFroms` records where a downloaded file
     /// came from, as a binary plist array of strings — by convention
     /// `[download URL, referrer URL]`. Decoded via the generic
-    /// com.apple.metadata:* path; the schema display name is "Where from",
-    /// matching what Finder and Spotlight show:
+    /// com.apple.metadata:* path; the schema entry's display name, description,
+    /// and keywords are shown as a comment above the value:
     /// <https://developer.apple.com/documentation/coreservices/kmditemwherefroms>.
     #[test]
     fn where_from_xattr_is_decoded() {
         let out = run(&darwin_fixture("downloaded-file.txt"));
-        assert!(out.contains("Where from:"), "{out}");
-        assert!(out.contains("https://example.com/downloaded.zip"), "{out}");
-        assert!(out.contains("https://example.com/page.html"), "{out}");
+        assert!(
+            out.contains("// Where from / Where the item came from / from, source, wherefrom"),
+            "{out}"
+        );
+        assert!(
+            out.contains(
+                "com.apple.metadata:kMDItemWhereFroms = \
+                 https://example.com/downloaded.zip, https://example.com/page.html"
+            ),
+            "{out}"
+        );
     }
 
     /// `com.apple.metadata:kMDItemFinderComment` carries the comment entered
     /// in Finder's Get Info panel, as a binary plist string. (Finder also
     /// mirrors comments into .DS_Store; the xattr is what Spotlight indexes.)
-    /// Decoded via the generic com.apple.metadata:* path; the schema display
-    /// name is "Spotlight comment":
+    /// Decoded via the generic com.apple.metadata:* path; the schema entry's
+    /// display name "Spotlight comment" leads the comment above the value:
     /// <https://developer.apple.com/documentation/coreservices/kmditemfindercomment>.
     #[test]
     fn finder_comment_xattr_is_decoded() {
         let out = run(&darwin_fixture("commented-file.txt"));
         assert!(
-            out.contains("Spotlight comment: Reviewed and approved"),
+            out.contains("// Spotlight comment / Spotlight comment for this item"),
+            "{out}"
+        );
+        assert!(
+            out.contains("com.apple.metadata:kMDItemFinderComment = Reviewed and approved"),
             "{out}"
         );
     }
@@ -99,12 +111,12 @@ mod darwin {
     /// `CSBackupSetItemExcluded` API, and its value is a binary plist string
     /// naming the subsystem honouring the exclusion — in practice always
     /// "com.apple.backupd". Decoded via the generic com.apple.metadata:* path;
-    /// the key has no schema display name, so it's labeled with the raw key.
+    /// the key isn't in the schema, so no descriptive comment is shown.
     #[test]
     fn time_machine_exclusion_xattr_is_decoded() {
         let out = run(&darwin_fixture("time-machine-excluded.txt"));
         assert!(
-            out.contains("com_apple_backup_excludeItem: com.apple.backupd"),
+            out.contains("com.apple.metadata:com_apple_backup_excludeItem = com.apple.backupd"),
             "{out}"
         );
     }
@@ -114,7 +126,7 @@ mod darwin {
     /// Spotlight index by mds. dtls decodes the whole family generically.
     /// `kMDItemDownloadedDate` (the download time, written by browsers
     /// alongside `kMDItemWhereFroms`) is absent from the `mdimport -A` schema
-    /// on current macOS, so it's labeled with the raw key:
+    /// on current macOS, so no descriptive comment is shown:
     /// <https://developer.apple.com/library/archive/documentation/CoreServices/Reference/MetadataAttributesRef/Reference/CommonAttrs.html>.
     #[test]
     fn downloaded_date_xattr_is_decoded_generically() {
@@ -125,19 +137,25 @@ mod darwin {
             .with_timezone(&Local)
             .format("%Y-%m-%d %H:%M:%S %z")
             .to_string();
-        assert!(out.contains("kMDItemDownloadedDate:"), "{out}");
+        assert!(
+            out.contains("com.apple.metadata:kMDItemDownloadedDate ="),
+            "{out}"
+        );
         assert!(out.contains(&expected), "{out}");
     }
 
     /// A `com.apple.metadata:*` key dtls has never heard of still decodes
-    /// generically, labeled with the raw key when the vendored `mdimport -A`
-    /// table has no display name for it. Values that aren't scalars or flat
+    /// generically, with no descriptive comment when the vendored `mdimport -A`
+    /// schema has no entry for it. Values that aren't scalars or flat
     /// arrays of scalars (nested dicts/arrays) render as compact plist debug
     /// output rather than falling back to a hex dump.
     #[test]
     fn nested_metadata_xattr_rendered_as_debug() {
         let out = run(&darwin_fixture("generic-metadata.txt"));
-        assert!(out.contains("kMDItemDtlsTestKey:"), "{out}");
+        assert!(
+            out.contains("com.apple.metadata:kMDItemDtlsTestKey ="),
+            "{out}"
+        );
         assert!(out.contains("version"), "{out}");
         assert!(!out.contains("0x62706c697374"), "{out}");
     }

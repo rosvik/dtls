@@ -16,55 +16,83 @@ pub fn print(ctx: &Context) {
     println!("{}", "Extended attributes:".bold().cyan());
     for attr in xattrs {
         let attr_name = attr.to_string_lossy();
-        match xattr::get(&ctx.path, &attr) {
-            Ok(Some(value)) => println!(
-                "  {} = {}",
-                attr_name.magenta(),
-                decode_xattr(&attr_name, &value)
-            ),
-            Ok(None) => println!("  {} = {}", attr_name.magenta(), "(empty)".dimmed()),
-            Err(_) => {}
+        let decoded = match xattr::get(&ctx.path, &attr) {
+            Ok(Some(value)) => decode_xattr(&attr_name, &value),
+            Ok(None) => Decoded {
+                comment: None,
+                value: "(empty)".dimmed().to_string(),
+            },
+            Err(_) => continue,
+        };
+        if let Some(comment) = decoded.comment {
+            println!("  {}", format!("// {comment}").dimmed());
         }
+        println!("  {} = {}", attr_name.magenta(), decoded.value);
     }
 }
 
-fn decode_xattr(name: &str, value: &[u8]) -> String {
+/// A decoded xattr ready to print: the value shown after `= `, plus an optional
+/// Spotlight-schema description rendered as a `// name / description / keywords`
+/// comment on the line above it.
+struct Decoded {
+    comment: Option<String>,
+    value: String,
+}
+
+fn decode_xattr(name: &str, value: &[u8]) -> Decoded {
+    let plain = |value| Decoded {
+        comment: None,
+        value,
+    };
     match name {
         "com.apple.metadata:_kMDItemUserTags" => {
-            decode_finder_tags(value).unwrap_or_else(|| display_xattr_value(value))
+            plain(decode_finder_tags(value).unwrap_or_else(|| display_xattr_value(value)))
         }
         "com.apple.quarantine" => {
-            decode_quarantine(value).unwrap_or_else(|| display_xattr_value(value))
+            plain(decode_quarantine(value).unwrap_or_else(|| display_xattr_value(value)))
         }
-        n if n.starts_with("com.apple.metadata:") => {
-            decode_metadata(n, value).unwrap_or_else(|| display_xattr_value(value))
-        }
-        _ => display_xattr_value(value),
+        n if n.starts_with("com.apple.metadata:") => decode_metadata(n, value),
+        _ => plain(display_xattr_value(value)),
     }
 }
 
 /// Any `com.apple.metadata:<key>` attribute holds the value of the Spotlight
-/// attribute `<key>` as a binary plist. Decodes it generically, labeled with
-/// the key's display name from the vendored `mdimport -A` table (falling
-/// back to the raw key).
-fn decode_metadata(name: &str, value: &[u8]) -> Option<String> {
-    let key = name.strip_prefix("com.apple.metadata:")?;
-    let parsed: plist::Value = plist::from_bytes(value).ok()?;
-    let rendered = render_plist_value(&parsed)?;
-    let label = display_name(key).unwrap_or(key);
-    Some(format!("{} {}", format!("{label}:").bold(), rendered))
+/// attribute `<key>` as a binary plist. Decodes the value generically and, when
+/// the key is in the vendored `mdimport -A` schema, attaches its display name,
+/// description, and keywords as a comment.
+fn decode_metadata(name: &str, value: &[u8]) -> Decoded {
+    let key = name.strip_prefix("com.apple.metadata:").unwrap_or(name);
+    Decoded {
+        comment: schema_comment(key),
+        value: render_metadata_value(value).unwrap_or_else(|| display_xattr_value(value)),
+    }
 }
 
-fn display_name(key: &str) -> Option<&'static str> {
+fn render_metadata_value(value: &[u8]) -> Option<String> {
+    let parsed: plist::Value = plist::from_bytes(value).ok()?;
+    render_plist_value(&parsed)
+}
+
+/// Looks `key` up in the Spotlight schema and joins its human-readable fields
+/// (display name, description, keywords — whichever are present) into a single
+/// `name / description / keywords` string. Returns `None` for keys the schema
+/// doesn't cover.
+fn schema_comment(key: &str) -> Option<String> {
     let lookup = |k| {
-        mditem_names::DISPLAY_NAMES
-            .binary_search_by_key(&k, |&(k, _)| k)
+        mditem_names::SCHEMA
+            .binary_search_by_key(&k, |&(k, ..)| k)
             .ok()
-            .map(|i| mditem_names::DISPLAY_NAMES[i].1)
+            .map(|i| mditem_names::SCHEMA[i])
     };
     // A leading underscore marks a key as private API; the schema often
     // lists the public counterpart (e.g. _kMDItemUserTags → kMDItemUserTags).
-    lookup(key).or_else(|| lookup(key.strip_prefix('_')?))
+    let (_, name, description, keywords) =
+        lookup(key).or_else(|| lookup(key.strip_prefix('_')?))?;
+    let fields: Vec<&str> = [name, description, keywords]
+        .into_iter()
+        .filter(|s| !s.is_empty())
+        .collect();
+    (!fields.is_empty()).then(|| fields.join(" / "))
 }
 
 fn render_plist_value(v: &plist::Value) -> Option<String> {
