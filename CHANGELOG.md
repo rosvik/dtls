@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.6.0](https://github.com/rosvik/dtls/compare/v0.5.0...v0.6.0) (2026-07-05)
+
+
+### Features
+
+* add handling of `com.apple.metadata:` xattrs from `mdimport -A` ([d1a4658](https://github.com/rosvik/dtls/commit/d1a46582bd916320cf721b26d3cc347f4fa1acce))
+* parse macOS specific metadata xattrs ([0f1e156](https://github.com/rosvik/dtls/commit/0f1e1565f190325f01aac1172fdefdbcd81c8a3f))
+* show schema description and keywords for metadata xattrs ([fb58562](https://github.com/rosvik/dtls/commit/fb585629e9366349ffe199eff99e2bf4be13aa6a))
+
 ## [0.5.0](https://github.com/rosvik/dtls/compare/v0.4.0...v0.5.0) (2026-07-01)
 
 
