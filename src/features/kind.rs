@@ -12,7 +12,7 @@ pub fn print(ctx: &Context) {
         return;
     };
     if meta.is_file() {
-        if let Ok(Some(t)) = infer::get_from_path(&ctx.path) {
+        if let Some(t) = &ctx.target_kind {
             println!(
                 "{}{} ({})",
                 label("Type:"),

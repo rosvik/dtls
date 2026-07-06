@@ -2,6 +2,7 @@ use std::fs::{self, Metadata};
 use std::path::{Path, PathBuf};
 
 use anyhow::Result;
+use infer::Type;
 
 use crate::output::terminal::{Size, terminal_size};
 
@@ -12,6 +13,7 @@ pub struct Context {
     /// Metadata with symlinks followed. `None` means the path is a symlink
     /// whose target is unreachable (a missing path errors before this).
     pub target_meta: Option<Metadata>,
+    pub target_kind: Option<Type>,
     pub terminal: Size,
 }
 
@@ -22,6 +24,7 @@ impl Context {
             path: path.to_path_buf(),
             is_symlink: symlink_meta.file_type().is_symlink(),
             target_meta: fs::metadata(path).ok(),
+            target_kind: infer::get_from_path(path).ok().flatten(),
             terminal: terminal_size(),
         })
     }
