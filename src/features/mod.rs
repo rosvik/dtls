@@ -5,6 +5,7 @@ pub mod flags;
 pub mod hash;
 pub mod kind;
 pub mod permissions;
+pub mod png;
 pub mod size;
 pub mod symlink;
 pub mod xattrs;

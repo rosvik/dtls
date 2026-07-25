@@ -8,7 +8,7 @@ use clio::ClioPath;
 use colored::Colorize;
 
 use crate::context::Context;
-use crate::features::{dates, exif, hash, kind, permissions, size, symlink, xattrs};
+use crate::features::{dates, exif, hash, kind, permissions, png, size, symlink, xattrs};
 
 #[derive(Parser, Debug)]
 #[command(
@@ -40,6 +40,7 @@ fn main() -> Result<()> {
     symlink::print(&ctx);
     hash::print(&ctx);
     xattrs::print(&ctx);
+    png::print(&ctx);
     exif::print(&ctx);
 
     Ok(())
