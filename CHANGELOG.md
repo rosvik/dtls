@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.7.0](https://github.com/rosvik/dtls/compare/v0.6.0...v0.7.0) (2026-08-18)
+
+
+### Features
+
+* add color to tag output ([02ce144](https://github.com/rosvik/dtls/commit/02ce1441373e9a249cabb558b2171fc02535bd63))
+* add PNG metadata from IHDR chunk ([bc5b7ed](https://github.com/rosvik/dtls/commit/bc5b7edcd7c67de61c863ed9f0025199e9bc9429))
+
 ## [0.6.0](https://github.com/rosvik/dtls/compare/v0.5.0...v0.6.0) (2026-07-05)
 
 
